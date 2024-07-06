@@ -8,12 +8,21 @@ EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution", "Solution", "{839FC6AE-D66B-407C-9461-4C394EF5CBEE}"
 	ProjectSection(SolutionItems) = preProject
 		.dockerignore = .dockerignore
+		..\Skytale.DotNetNew.Templates\src\Templates\content\SolutionItems\content\.editorconfig = ..\Skytale.DotNetNew.Templates\src\Templates\content\SolutionItems\content\.editorconfig
 		.gitattributes = .gitattributes
+		..\Skytale.DotNetNew.Templates\src\Templates\content\SolutionItems\content\.gitattributes = ..\Skytale.DotNetNew.Templates\src\Templates\content\SolutionItems\content\.gitattributes
 		.gitignore = .gitignore
+		..\Skytale.DotNetNew.Templates\src\Templates\content\SolutionItems\content\.gitignore = ..\Skytale.DotNetNew.Templates\src\Templates\content\SolutionItems\content\.gitignore
 		G:\docker\km-filewatcher\appsettings.json = G:\docker\km-filewatcher\appsettings.json
+		..\Skytale.DotNetNew.Templates\src\Templates\content\SolutionItems\content\Directory.Build.props = ..\Skytale.DotNetNew.Templates\src\Templates\content\SolutionItems\content\Directory.Build.props
+		..\Skytale.DotNetNew.Templates\src\Templates\content\SolutionItems\content\Directory.Build.targets = ..\Skytale.DotNetNew.Templates\src\Templates\content\SolutionItems\content\Directory.Build.targets
 		Dockerfile = Dockerfile
+		..\Skytale.DotNetNew.Templates\src\Templates\content\SolutionItems\content\dotnet.ruleset = ..\Skytale.DotNetNew.Templates\src\Templates\content\SolutionItems\content\dotnet.ruleset
+		..\Skytale.DotNetNew.Templates\src\Templates\content\SolutionItems\content\GitVersion.yml = ..\Skytale.DotNetNew.Templates\src\Templates\content\SolutionItems\content\GitVersion.yml
+		..\Skytale.DotNetNew.Templates\src\Templates\content\SolutionItems\content\global.json = ..\Skytale.DotNetNew.Templates\src\Templates\content\SolutionItems\content\global.json
 		LICENSE.txt = LICENSE.txt
 		README.md = README.md
+		..\Skytale.DotNetNew.Templates\src\Templates\content\SolutionItems\content\stylecop.json = ..\Skytale.DotNetNew.Templates\src\Templates\content\SolutionItems\content\stylecop.json
 	EndProjectSection
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Github", "Github", "{C4D741D5-579D-4782-AA5F-CD4F14CABAD2}"

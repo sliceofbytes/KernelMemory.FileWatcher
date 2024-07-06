@@ -1,9 +1,8 @@
-﻿namespace KernelMemory.FileWatcher.Messages
+﻿namespace KernelMemory.FileWatcher.Messages;
+
+internal enum FileEventType
 {
-    internal enum FileEventType
-    {
-        Upsert,
-        Delete,
-        Ignore
-    }
+    Upsert,
+    Delete,
+    Ignore
 }

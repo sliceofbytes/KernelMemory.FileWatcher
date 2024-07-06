@@ -1,7 +1,12 @@
-﻿namespace KernelMemory.FileWatcher.Configuration
+﻿using System.ComponentModel.DataAnnotations;
+
+namespace KernelMemory.FileWatcher.Configuration;
+
+internal class FileWatcherOptions
 {
-    internal class FileWatcherOptions
-    {
-        public List<FileWatcherDirectoryOptions> Directories { get; set; } = new();
-    }
+    [Required]
+    [MinLength(1, ErrorMessage = "At least one directory must be specified.")]
+    public List<FileWatcherDirectoryOptions> Directories { get; set; } = [];
+
+    public bool WaitForInitialScans { get; set; } = false;
 }

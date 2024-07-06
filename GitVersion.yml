@@ -1,0 +1,50 @@
+# Default mode for versioning, focuses on preparing releases at any commit.
+mode: ContinuousDelivery
+
+# Next version 
+# next-version: 1.0.0
+
+# Determines how the assembly version fields are incremented.
+assembly-versioning-scheme: MajorMinorPatch
+
+# Determines how the assembly file version fields are incremented.
+assembly-file-versioning-scheme: MajorMinorPatch
+
+
+ # Format for the informational version.
+assembly-informational-format: '{InformationalVersion}'
+
+
+
+# Enables version increments based on commit messages.
+commit-message-incrementing: Enabled  
+
+# Commit Message Regex
+# Regex to identify commits that bump the major version.
+major-version-bump-message: '\+semver:\s?(breaking|major)|#major|#breaking'
+
+# Regex to identify commits that bump the minor version.
+minor-version-bump-message: '\+semver:\s?(feature|minor)|#feature|#minor'
+
+# Regex to identify commits that bump the patch version.
+patch-version-bump-message: '\+semver:\s?(fix|patch)|#fix|#patch'
+
+# Regex to identify commits that should not trigger any version bump.
+no-bump-message: '\+semver:\s?(none|skip)|#none|#skip'
+
+branches:
+  main:
+    regex: ^master$|^main$
+    increment: Patch
+    is-mainline: true
+    tag: ''
+
+  dev:
+    regex: ^dev(elop)?(ment)?$
+    mode: ContinuousDeployment
+    increment: Minor
+    tag: alpha,
+    source-branches: ['main']
+
+ignore:
+  sha: []

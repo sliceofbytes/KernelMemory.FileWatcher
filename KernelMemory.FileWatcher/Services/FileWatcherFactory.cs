@@ -1,26 +1,65 @@
-﻿namespace KernelMemory.FileWatcher.Services
+﻿using System.Collections.Concurrent;
+
+namespace KernelMemory.FileWatcher.Services;
+internal interface IFileWatcherFactory
 {
-    internal interface IFileWatcherFactory
+    IFileSystemWatcher Create(string directory, string filter, bool recursive);
+}
+
+internal class FileWatcherFactory(ILogger logger) : IFileWatcherFactory, IDisposable
+{
+    private readonly ConcurrentDictionary<string, IFileSystemWatcher> _watchers = new();
+    private readonly ILogger _logger = logger.ForContext<FileWatcherFactory>();
+    private bool _disposed;
+
+    public IFileSystemWatcher Create(string directory, string filter, bool recursive)
     {
-        public FileSystemWatcher Create(string directory, string filter, bool recursive);
+        var watcher = new FileSystemWatcher(directory)
+        {
+            NotifyFilter = NotifyFilters.Attributes
+                           | NotifyFilters.CreationTime
+                           | NotifyFilters.DirectoryName
+                           | NotifyFilters.FileName
+                           | NotifyFilters.LastWrite
+                           | NotifyFilters.Size,
+            Filter = filter,
+            IncludeSubdirectories = recursive
+        };
+
+        var wrapper = new FileSystemWatcherWrapper(watcher);
+        _watchers.TryAdd(directory, wrapper);
+
+        return wrapper;
     }
 
-    internal class FileWatcherFactory : IFileWatcherFactory
+    public void Dispose()
     {
-        public FileSystemWatcher Create(string directory, string filter, bool recursive = true)
+        Dispose(true);
+        GC.SuppressFinalize(this);
+    }
+
+    protected virtual void Dispose(bool disposing)
+    {
+        if (!_disposed)
         {
-            //BUG: a deleted subfolder is not catched by FileSystemWatcher (including all containing files)
-            var watcher = new FileSystemWatcher(directory);
-            watcher.NotifyFilter = NotifyFilters.Attributes
-                                   | NotifyFilters.CreationTime
-                                   | NotifyFilters.DirectoryName
-                                   | NotifyFilters.FileName
-                                   | NotifyFilters.LastWrite
-                                   | NotifyFilters.Size;
-            watcher.EnableRaisingEvents = true;
-            watcher.IncludeSubdirectories = recursive;
-            watcher.Filter = filter;
-            return watcher;
+            if (disposing)
+            {
+                foreach (var watcher in _watchers.Values)
+                {
+                    try
+                    {
+                        watcher.Dispose();
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.Error(ex, "Error disposing watcher");
+                    }
+                }
+
+                _watchers.Clear();
+            }
+
+            _disposed = true;
         }
     }
 }

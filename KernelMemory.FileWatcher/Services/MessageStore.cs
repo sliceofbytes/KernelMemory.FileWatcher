@@ -1,98 +1,116 @@
-﻿using KernelMemory.FileWatcher.Configuration;
-using KernelMemory.FileWatcher.Messages;
-using Microsoft.Extensions.Logging;
+﻿using KernelMemory.FileWatcher.Messages;
 using Microsoft.Extensions.ObjectPool;
 using Microsoft.Extensions.Options;
 using System.Collections.Concurrent;
 using System.Text;
 
-namespace KernelMemory.FileWatcher.Services
+namespace KernelMemory.FileWatcher.Services;
+
+internal interface IMessageStore
 {
-    internal interface IMessageStore
-    {
-        Task Add(FileEvent fileEvent);
-        public Message? TakeNext();
-        public List<Message> TakeAll();
-        public bool HasNext();
-    }
+    Task AddAsync(FileEvent fileEvent);
+    Message? TakeNext();
+    IReadOnlyList<Message> TakeAll();
+    bool HasNext();
+}
 
-    internal class MessageStore : IMessageStore
-    {
-        private readonly ConcurrentDictionary<string, Message> store = new();
-        private readonly ILogger<MessageStore> logger;
-        private readonly FileWatcherOptions options;
-        private readonly ObjectPool<StringBuilder> pool = new DefaultObjectPoolProvider().CreateStringBuilderPool();
+internal class MessageStore(ILogger logger, IOptions<FileWatcherOptions> options) : IMessageStore, IDisposable
+{
+    private readonly ConcurrentDictionary<string, Message> _store = new();
+    private readonly ILogger _logger = logger?.ForContext<MessageStore>() ?? throw new ArgumentNullException(nameof(logger));
+    private readonly FileWatcherOptions _options = options?.Value ?? throw new ArgumentNullException(nameof(options));
+    private readonly ObjectPool<StringBuilder> _pool = new DefaultObjectPoolProvider().CreateStringBuilderPool();
+    private readonly SemaphoreSlim _semaphore = new(1, 1);
+    private bool _disposed;
 
-        public MessageStore(ILogger<MessageStore> logger, IOptions<FileWatcherOptions> options)
+    public async Task AddAsync(FileEvent fileEvent)
+    {
+        ArgumentNullException.ThrowIfNull(fileEvent);
+
+        if (fileEvent.EventType == FileEventType.Ignore)
         {
-            this.logger = logger;
-            this.options = options.Value;
+            return;
         }
 
-        public Task Add(FileEvent fileEvent)
+        await _semaphore.WaitAsync();
+        try
         {
-            ArgumentNullException.ThrowIfNull(fileEvent);
-            if (fileEvent.EventType == FileEventType.Ignore)
+            var option = _options.Directories.Find(d =>
+                fileEvent.Directory.StartsWith(d.Path, StringComparison.OrdinalIgnoreCase));
+
+            if (option != null)
             {
-                return Task.CompletedTask;
-            }
+                string documentId = BuildDocumentId(option.Index, fileEvent.FileName);
+                var item = new Message(fileEvent, option.Index, documentId);
 
-            var option = options.Directories.FirstOrDefault(d => fileEvent.Directory.StartsWith(d.Path));
-            if (option != null && fileEvent.Directory.StartsWith(option.Path))
-            {
-                var documentId = BuildDocumentId(option.Index, fileEvent.FileName);
+                _store[item.DocumentId] = item;
 
-                var item = new Message
-                {
-                    Event = fileEvent,
-                    Index = option.Index,
-                    DocumentId = documentId
-                };
-
-                store.AddOrUpdate(item.DocumentId, item, (_, _) => item);
-                logger.LogInformation($"Added event {documentId} for file {item.Event.FileName} of type {item.Event.EventType} to the store");
+                _logger.Information(
+                    "Added event {DocumentId} for file {FileName} of type {EventType} to the store",
+                    documentId,
+                    item.Event.FileName,
+                    item.Event.EventType);
             }
             else
             {
-                logger.LogWarning($"No matching directory found for file {fileEvent.FileName}");
+                _logger.Warning("No matching directory found for file {FileName}", fileEvent.FileName);
             }
-            return Task.CompletedTask;
         }
-
-        public Message? TakeNext()
+        finally
         {
-            return store.TryRemove(store.Keys.First(), out var message) ? message : null;
+            _semaphore.Release();
         }
+    }
 
-        public List<Message> TakeAll()
+    public Message? TakeNext()
+    {
+        string? key = _store.Keys.FirstOrDefault();
+        return key != null && _store.TryRemove(key, out var message) ? message : null;
+    }
+
+    public IReadOnlyList<Message> TakeAll()
+    {
+        var messages = _store.Values.ToList();
+        _store.Clear();
+        return messages;
+    }
+
+    public bool HasNext() => !_store.IsEmpty;
+
+    private string BuildDocumentId(string index, string fileName)
+    {
+        const char separator = '_';
+        var sb = _pool.Get();
+        try
         {
-            var result = new List<Message>();
-            foreach (var key in store.Keys)
+            sb.Append(index)
+              .Append(separator)
+              .Append(fileName.Replace(Path.DirectorySeparatorChar, separator).Replace(' ', separator));
+            return sb.ToString();
+        }
+        finally
+        {
+            _pool.Return(sb);
+        }
+    }
+
+    public void Dispose()
+    {
+        Dispose(true);
+        GC.SuppressFinalize(this);
+    }
+
+    protected virtual void Dispose(bool disposing)
+    {
+        if (!_disposed)
+        {
+            if (disposing)
             {
-                store.TryRemove(key, out var message);
-                if(message!=null) { result.Add(message); }
+                _store.Clear();
+                _semaphore.Dispose();
             }
 
-            return result;
-        }
-
-        public bool HasNext()
-        {
-            return store.Count > 0;
-        }
-
-        private string BuildDocumentId(string index, string fileName)
-        {
-            const char separator = '_';
-
-            var sb = pool.Get();
-            sb.Append(index);
-            sb.Append(separator);
-            sb.Append(fileName.Replace(Path.DirectorySeparatorChar, separator).Replace(' ', separator));
-            var result = sb.ToString();
-            pool.Return(sb);
-
-            return result;
+            _disposed = true;
         }
     }
 }
