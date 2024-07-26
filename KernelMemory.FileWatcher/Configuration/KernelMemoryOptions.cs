@@ -17,6 +17,15 @@ internal class KernelMemoryOptions
     [Range(0, 10)]
     public int Retries { get; set; } = 2;
 
+    [Range(1, 1000)]
+    public int FirstRetryDelay { get; set; } = 1;
+
     [Range(1, 100)]
     public int ParallelUploads { get; set; } = 4;
+
+    [Range(5, 1000)]
+    public int? CircuitBreakDuration { get; set; } = 30;
+
+    [Range(2, 50)]
+    public int? CircuitEventsBeforeBreak { get; set; } = 5;
 }

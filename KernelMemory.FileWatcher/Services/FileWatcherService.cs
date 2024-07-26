@@ -6,7 +6,7 @@ namespace KernelMemory.FileWatcher.Services;
 
 internal interface IFileWatcherService
 {
-    Task WatchAsync();
+    Task WatchAsync(CancellationToken cancellationToken);
 }
 
 internal class FileWatcherService : IFileWatcherService, IDisposable
@@ -19,34 +19,52 @@ internal class FileWatcherService : IFileWatcherService, IDisposable
     private readonly BlockingCollection<string> _filesToProcess = [];
     private readonly CancellationTokenSource _cts = new();
     private readonly List<Task> _initialScanTasks = [];
-    private readonly Task? _processingTask;
-
+    private Task? _processingTask;
     private bool _disposed;
 
     public FileWatcherService(
-        ILogger logger,
         IFileWatcherFactory fileWatcherFactory,
         IMessageStore messageStore,
         IOptions<FileWatcherOptions> options)
     {
-        _logger = logger.ForContext<FileWatcherService>();
+        _logger = Log.ForContext<FileWatcherService>();
         _fileWatcherFactory = fileWatcherFactory;
         _options = options.Value;
         _messageStore = messageStore;
-        _processingTask = Task.Run(ProcessFilesAsync);
     }
 
-    public async Task WatchAsync()
+    public async Task WatchAsync(CancellationToken cancellationToken)
     {
+        _logger.Information("Starting file watching process");
         foreach (var directory in _options.Directories)
         {
             WatchDirectory(directory);
         }
 
+        _processingTask = ProcessFilesAsync();
+        _logger.Information("File processing task started");
+
         if (_options.WaitForInitialScans)
         {
+            _logger.Information("Waiting for initial scans to complete");
             await Task.WhenAll(_initialScanTasks);
+            _logger.Information("Initial scans completed");
         }
+
+        try
+        {
+            await Task.Delay(Timeout.Infinite, cancellationToken);
+        }
+        catch (OperationCanceledException oce)
+        {
+            _logger.Information(oce, "File watching cancelled");
+        }
+        finally
+        {
+            // Cleanup code
+        }
+
+        _logger.Information("File watching setup completed, now running indefinitely");
     }
 
     private void WatchDirectory(FileWatcherDirectoryOptions directory)
@@ -84,17 +102,30 @@ internal class FileWatcherService : IFileWatcherService, IDisposable
 
     private async Task ProcessFilesAsync()
     {
+        _logger.Information("File processing loop started");
         try
         {
-            foreach (string file in _filesToProcess.GetConsumingEnumerable(_cts.Token))
+            while (!_cts.Token.IsCancellationRequested)
             {
-                var directory = _options.Directories.First(d => file.StartsWith(d.Path));
-                await EnqueueFileEventAsync(FileEventType.Upsert, file, directory);
+                if (_filesToProcess.TryTake(out string? file, Timeout.Infinite, _cts.Token))
+                {
+                    _logger.Information("Processing file: {File}", file);
+                    var directory = _options.Directories.First(d => file.StartsWith(d.Path));
+                    await EnqueueFileEventAsync(FileEventType.Upsert, file, directory);
+                }
             }
         }
-        catch (OperationCanceledException)
+        catch (OperationCanceledException oce)
         {
-            // Expected when cancellation is requested
+            _logger.Information(oce, "File processing loop cancelled");
+        }
+        catch (Exception ex)
+        {
+            _logger.Error(ex, "Error in ProcessFilesAsync");
+        }
+        finally
+        {
+            _logger.Information("File processing loop ended");
         }
     }
 
@@ -133,7 +164,6 @@ internal class FileWatcherService : IFileWatcherService, IDisposable
         _logger.Information("Initial scan completed for {DirectoryPath}", directory.Path);
     }
 
-
     private async Task EnqueueEventAsync(FileSystemEventArgs e, FileWatcherDirectoryOptions directory)
     {
         var eventType = ConvertEventTypes(e.ChangeType);
@@ -150,16 +180,40 @@ internal class FileWatcherService : IFileWatcherService, IDisposable
 
     private async Task EnqueueFileEventAsync(FileEventType eventType, string fullPath, FileWatcherDirectoryOptions directory)
     {
-        string fileName = Path.GetFileName(fullPath);
-        string fileDirectory = Path.GetDirectoryName(fullPath) ?? string.Empty;
-        string fileRelativePath = Path.GetRelativePath(directory.Path, fullPath);
-        var fileEvent = new FileEvent(
-              eventType: eventType,
-              fileName: fileName,
-              directory: fileDirectory,
-              relativePath: fileRelativePath);
+        int retryCount = 0;
+        const int maxRetries = 3;
+        const int retryDelay = 1000; // 1 second
 
-        await _messageStore.AddAsync(fileEvent);
+        while (retryCount < maxRetries)
+        {
+            try
+            {
+                string fileName = Path.GetFileName(fullPath);
+                string fileDirectory = Path.GetDirectoryName(fullPath) ?? string.Empty;
+                string fileRelativePath = Path.GetRelativePath(directory.Path, fullPath);
+                var fileEvent = new FileEvent(
+                    eventType: eventType,
+                    fileName: fileName,
+                    directory: fileDirectory,
+                    relativePath: fileRelativePath);
+
+                await _messageStore.AddAsync(fileEvent);
+                return;
+            }
+            catch (IOException ex)
+            {
+                _logger.Warning(ex, "IO error when enqueueing file event for {FullPath}. Retry {RetryCount} of {MaxRetries}", fullPath, retryCount + 1, maxRetries);
+                await Task.Delay(retryDelay);
+                retryCount++;
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(ex, "Unexpected error when enqueueing file event for {FullPath}", fullPath);
+                return;
+            }
+        }
+
+        _logger.Error("Failed to enqueue file event for {FullPath} after {MaxRetries} retries", fullPath, maxRetries);
     }
 
     private void OnError(ErrorEventArgs e)
@@ -188,16 +242,20 @@ internal class FileWatcherService : IFileWatcherService, IDisposable
         {
             if (disposing)
             {
+                // Send cancel signal to start the dispose process.
+                _cts?.Cancel();
+
+                // Wait for the initial scan to complete or respond to cancel.
+                Task.WhenAll(_initialScanTasks).Wait();
+
+                // Wait for the processing task to complete or respond to cancel.
+                _processingTask?.Wait();
+
                 foreach (var watcher in _watchers.Values)
                 {
                     try
                     {
-                        _cts?.Cancel();
-                        _cts?.Dispose();
-                        _filesToProcess?.Dispose();
-                        _processingTask?.Wait();
-                        Task.WhenAll(_initialScanTasks).Wait();
-                        watcher.Dispose();
+                        watcher?.Dispose();
                     }
                     catch (Exception ex)
                     {
@@ -205,7 +263,14 @@ internal class FileWatcherService : IFileWatcherService, IDisposable
                     }
                 }
 
+                // Clear the watchers collection.
                 _watchers.Clear();
+
+                // Dispose of the blocking collection 2nd to last before the cancellation token.
+                _filesToProcess?.Dispose();
+
+                // Dispose of cancellation token last.
+                _cts?.Dispose();
             }
 
             _disposed = true;

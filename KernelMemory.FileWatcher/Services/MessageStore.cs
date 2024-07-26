@@ -3,6 +3,7 @@ using Microsoft.Extensions.ObjectPool;
 using Microsoft.Extensions.Options;
 using System.Collections.Concurrent;
 using System.Text;
+using System.Text.RegularExpressions;
 
 namespace KernelMemory.FileWatcher.Services;
 
@@ -40,7 +41,7 @@ internal class MessageStore(ILogger logger, IOptions<FileWatcherOptions> options
 
             if (option != null)
             {
-                string documentId = BuildDocumentId(option.Index, fileEvent.FileName);
+                string documentId = BuildDocumentId(option.Index, fileEvent);
                 var item = new Message(fileEvent, option.Index, documentId);
 
                 _store[item.DocumentId] = item;
@@ -77,21 +78,35 @@ internal class MessageStore(ILogger logger, IOptions<FileWatcherOptions> options
 
     public bool HasNext() => !_store.IsEmpty;
 
-    private string BuildDocumentId(string index, string fileName)
+    private string BuildDocumentId(string index, FileEvent fileEvent)
     {
         const char separator = '_';
-        var sb = _pool.Get();
-        try
-        {
-            sb.Append(index)
-              .Append(separator)
-              .Append(fileName.Replace(Path.DirectorySeparatorChar, separator).Replace(' ', separator));
-            return sb.ToString();
-        }
-        finally
-        {
-            _pool.Return(sb);
-        }
+        string documentPathing = Path.Combine(index, Path.ChangeExtension(fileEvent.RelativePath, null))
+                          .Replace(Path.DirectorySeparatorChar, separator)
+                          .Replace(' ', separator).ToLower();
+
+        string documentId = Regex.Replace(
+            documentPathing,
+            $@"[^a-zA-Z0-9{Regex.Escape(separator.ToString())}]+",
+            separator.ToString())
+            .Replace($"{separator}{separator}", separator.ToString())
+            .Trim(separator);
+
+        return documentId;
+
+        //var sb = _pool.Get();
+        //try
+        //{
+        //    sb.Append(index)
+        //      .Append(separator)
+        //      .Append(fileEvent.RelativePath.Replace(Path.DirectorySeparatorChar, separator))
+        //      .Append(Path.GetFileNameWithoutExtension(fileEvent.FileName).Replace(Path.DirectorySeparatorChar, separator).Replace(' ', separator));
+        //    return sb.ToString();
+        //}
+        //finally
+        //{
+        //    _pool.Return(sb);
+        //}
     }
 
     public void Dispose()

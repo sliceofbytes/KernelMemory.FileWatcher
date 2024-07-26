@@ -4,5 +4,3 @@
 // a specific target and scoped to a namespace, type, member, etc.
 
 using System.Diagnostics.CodeAnalysis;
-
-[assembly: SuppressMessage("Major Code Smell", "S3966:Objects should not be disposed more than once", Justification = "<Pending>", Scope = "member", Target = "~M:KernelMemory.FileWatcher.Services.FileWatcherService.Dispose(System.Boolean)")]
