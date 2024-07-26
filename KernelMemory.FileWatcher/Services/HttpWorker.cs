@@ -36,7 +36,7 @@ internal class HttpWorker : IHostedService, IAsyncDisposable
         _options = options?.Value ?? throw new ArgumentNullException(nameof(options));
         _processingInterval = _options.Schedule;
 
-        _logger.Information("HttpWorker constructed");
+        _logger.Information("Http Worker - {Status}", "Constructed");
     }
 
     /// <summary>
@@ -44,8 +44,9 @@ internal class HttpWorker : IHostedService, IAsyncDisposable
     /// </summary>
     public Task StartAsync(CancellationToken cancellationToken)
     {
-        _logger.Information("HttpWorker starting");
+        _logger.Information("Http Worker - {Status}", "Starting");
         _timer = new Timer(ExecuteTask, null, TimeSpan.Zero, _processingInterval);
+        _logger.Information("Http Worker - {Status}", "Started");
         return Task.CompletedTask;
     }
 
@@ -54,8 +55,8 @@ internal class HttpWorker : IHostedService, IAsyncDisposable
     /// </summary>
     private void ExecuteTask(object? state)
     {
-        _logger.Debug("HttpWorker timer tick");
-        _ = ProcessMessagesAsync(_stoppingCts.Token);
+        _logger.Debug("Http Worker - {Status}", "Tick");
+        _executingTask = ProcessMessagesAsync(_stoppingCts.Token);
     }
 
     /// <summary>
@@ -63,7 +64,7 @@ internal class HttpWorker : IHostedService, IAsyncDisposable
     /// </summary>
     public async Task StopAsync(CancellationToken cancellationToken)
     {
-        _logger.Information("HttpWorker is stopping");
+        _logger.Information("Http Worker - {Status}", "Stopping");
 
         if (_timer != null)
             await _timer.DisposeAsync();
@@ -82,7 +83,7 @@ internal class HttpWorker : IHostedService, IAsyncDisposable
             }
         }
 
-        _logger.Information("HttpWorker stopped");
+        _logger.Information("Http Worker - {Status}", "Stopped");
     }
 
     /// <summary>
@@ -90,20 +91,19 @@ internal class HttpWorker : IHostedService, IAsyncDisposable
     /// </summary>
     private async Task ProcessMessagesAsync(CancellationToken stoppingToken)
     {
+        _logger.Information("Http Worker - Processing Messages {Status}", "Started");
         try
         {
-            _logger.Debug("Checking for messages to process");
             var messages = _store.TakeAll();
-            _logger.Information("Found {Count} messages to process", messages.Count);
-
+            _logger.Information("Http Worker - {Count} {Status}", messages.Count, "Messages Found");
             if (messages.Count == 0)
             {
-                _logger.Debug("No messages to process");
                 return;
             }
 
             var tasks = messages.Select(message => ProcessMessageAsync(message, stoppingToken));
             await Task.WhenAll(tasks);
+            _logger.Information("Http Worker - Processing Messages {Status}", "Complete");
         }
         catch (OperationCanceledException oce)
         {
@@ -125,7 +125,8 @@ internal class HttpWorker : IHostedService, IAsyncDisposable
             return;
         }
 
-        _logger.Information("Processing message {DocumentId} for file {FileName} of type {EventType}", message.DocumentId, message.Event?.FileName, message.Event?.EventType);
+        _logger.Information("Http Worker - Processing Message {Status}", "Started");
+        _logger.Information("Http Worker - Processing message {DocumentId} for file \"{FileName}\" of type {EventType}", message.DocumentId, message.Event?.FileName, message.Event?.EventType);
 
         try
         {
@@ -147,7 +148,7 @@ internal class HttpWorker : IHostedService, IAsyncDisposable
 
             if (response?.IsSuccessStatusCode == true)
             {
-                _logger.Information("Successfully processed message {DocumentId}", message.DocumentId);
+                _logger.Information("Http Worker - Processing Message {Status}", "Successful");
             }
             else
             {

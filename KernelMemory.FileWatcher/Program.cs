@@ -28,19 +28,20 @@ internal class Program
         {
             try
             {
+                Log.Information("Building Host - {Status}", "Started");
                 using var host = CreateHostBuilder(args).Build();
-                Log.Information("Host built...");
+                Log.Information("Building Host - {Status}", "Complete");
 
-                Log.Information("Starting Application");
+                Log.Information("Application Startup - {Status}", "Started");
                 await host.StartAsync();
-                Log.Information("Host.StartAsync completed successfully");
+                Log.Information("Application Startup - {Status}", "Complete");
 
                 // Log all hosted services
-                var hostedServices = host.Services.GetServices<IHostedService>();
-                foreach (var service in hostedServices)
-                {
-                    Log.Information("Hosted service registered: {ServiceType}", service.GetType().Name);
-                }
+                // var hostedServices = host.Services.GetServices<IHostedService>();
+                // foreach (var service in hostedServices)
+                // {
+                //    Log.Information("Hosted service registered: {ServiceType}", service.GetType().Name);
+                // }
 
                 // Wait for the application to stop
                 await host.WaitForShutdownAsync();
@@ -122,18 +123,12 @@ internal class Program
         services.AddSingleton<ICircuitBreakerPolicy<HttpResponseMessage>>(sp => HttpClientStartup.GetCircuitBreakerPolicy(sp.GetRequiredService<IOptions<KernelMemoryOptions>>().Value));
 
         services
-             .AddHostedService<HttpWorker>()
-            .AddHostedService<ConfigurationMonitor>()
-            .AddHostedService<WatcherHostedService>()
             .AddSingleton<IMessageStore, MessageStore>()
             .AddSingleton<IFileWatcherFactory, FileWatcherFactory>()
-            .AddSingleton<IFileWatcherService, FileWatcherService>();
-            //.AddSingleton<IMessageStore, MessageStore>()
-            //.AddSingleton<IFileWatcherFactory, FileWatcherFactory>()
-            //.AddSingleton<IFileWatcherService, FileWatcherService>()
-            //.AddHostedService<ConfigurationMonitor>()
-            //.AddHostedService<WatcherHostedService>()
-            //.AddHostedService<HttpWorker>();
+            .AddSingleton<IFileWatcherService, FileWatcherService>()
+            .AddHostedService<ConfigurationMonitor>()
+            .AddHostedService<WatcherHostedService>()
+            .AddHostedService<HttpWorker>();
 
         services.Configure<HostOptions>(opts => opts.ShutdownTimeout = TimeSpan.FromSeconds(DefaultOptions.HostShutdownTimeout));
     }

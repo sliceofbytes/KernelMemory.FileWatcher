@@ -43,7 +43,7 @@ internal class FileWatcherService : IFileWatcherService, IDisposable
 
     private async Task WatchInternalAsync(CancellationToken cancellationToken)
     {
-        _logger.Information("Starting file watching process");
+        _logger.Information("File Watcher Service - {Status}", "Starting");
         foreach (var directory in _options.Directories)
         {
             WatchDirectory(directory);
@@ -66,66 +66,10 @@ internal class FileWatcherService : IFileWatcherService, IDisposable
         }
         catch (OperationCanceledException oce)
         {
-            _logger.Information(oce, "File watching cancelled");
+            _logger.Information(oce, "File Watcher Service - {Status}", "Cancelled");
         }
     }
 
-    //public async Task WatchAsync(CancellationToken cancellationToken)
-    //{
-    //    _logger.Information("Starting file watching process");
-    //    foreach (var directory in _options.Directories)
-    //    {
-    //        WatchDirectory(directory);
-    //    }
-
-    //    _processingTask = ProcessFilesAsync(cancellationToken);
-
-    //    if (_options.WaitForInitialScans)
-    //    {
-    //        _logger.Information("Waiting for initial scans to complete");
-    //        await Task.WhenAll(_initialScanTasks);
-    //        _logger.Information("Initial scans completed");
-    //    }
-
-    //    _logger.Information("File watching setup completed, now running indefinitely");
-
-    //    // Wait for cancellation
-    //    await Task.Delay(Timeout.Infinite, cancellationToken);
-    //}
-
-    //public async Task WatchAsync(CancellationToken cancellationToken)
-    //{
-    //    _logger.Information("Starting file watching process");
-    //    foreach (var directory in _options.Directories)
-    //    {
-    //        WatchDirectory(directory);
-    //    }
-
-    //    _processingTask = ProcessFilesAsync();
-    //    _logger.Information("File processing task started");
-
-    //    if (_options.WaitForInitialScans)
-    //    {
-    //        _logger.Information("Waiting for initial scans to complete");
-    //        await Task.WhenAll(_initialScanTasks);
-    //        _logger.Information("Initial scans completed");
-    //    }
-
-    //    try
-    //    {
-    //        await Task.Delay(Timeout.Infinite, cancellationToken);
-    //    }
-    //    catch (OperationCanceledException oce)
-    //    {
-    //        _logger.Information(oce, "File watching cancelled");
-    //    }
-    //    finally
-    //    {
-    //        // Cleanup code
-    //    }
-
-    //    _logger.Information("File watching setup completed, now running indefinitely");
-    //}
 
     private void WatchDirectory(FileWatcherDirectoryOptions directory)
     {
@@ -157,12 +101,13 @@ internal class FileWatcherService : IFileWatcherService, IDisposable
             _initialScanTasks.Add(initialScanTask);
         }
 
-        _logger.Information("Watching {DirectoryPath}", directory.Path);
+        _logger.Information("File Watcher Service - {Status}", "Watching");
+        _logger.Information("File Watcher Service - {Path}", directory.Path);
     }
 
     private async Task ProcessFilesAsync(CancellationToken cancellationToken)
     {
-        _logger.Information("File processing loop started");
+        _logger.Information("File Watcher Service - {Status}", "Process Loop Started");
         try
         {
             while (!cancellationToken.IsCancellationRequested)
@@ -211,6 +156,7 @@ internal class FileWatcherService : IFileWatcherService, IDisposable
 
     private async Task InitialScanAsync(FileWatcherDirectoryOptions directory)
     {
+        _logger.Information("File Watcher Service - {Status}", "Initial Scan Starting");
         var searchOption = directory.IncludeSubdirectories ? SearchOption.AllDirectories : SearchOption.TopDirectoryOnly;
 
         await Task.Run(() =>
@@ -219,9 +165,9 @@ internal class FileWatcherService : IFileWatcherService, IDisposable
             {
                 _filesToProcess.Add(file);
             }
-        });
 
-        _logger.Information("Initial scan completed for {DirectoryPath}", directory.Path);
+            _logger.Information("File Watcher Service - {Status}", "Initial Scan Complete");
+        });
     }
 
     private async Task EnqueueEventAsync(FileSystemEventArgs e, FileWatcherDirectoryOptions directory)
@@ -305,6 +251,7 @@ internal class FileWatcherService : IFileWatcherService, IDisposable
                 // Send cancel signal to start the dispose process.
                 _cts?.Cancel();
                 _watchTask?.Wait();
+
                 // Wait for the initial scan to complete or respond to cancel.
                 Task.WhenAll(_initialScanTasks).Wait();
 

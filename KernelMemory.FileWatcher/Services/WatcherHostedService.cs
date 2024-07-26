@@ -14,21 +14,25 @@ internal class WatcherHostedService : BackgroundService
 
     protected override Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        _logger.Information("WatcherHostedService starting");
+        _logger.Information("Watcher Hosted Service - {Status}", "Starting");
         try
         {
-            return _fileWatcher.WatchAsync(stoppingToken);
+            var task = _fileWatcher.WatchAsync(stoppingToken);
+            _logger.Information("Watcher Hosted Service - {Status}", "Started");
+            return task;
         }
         catch (Exception ex)
         {
-            _logger.Error(ex, "WatcherHostedService failed to start");
+            _logger.Error(ex, "Watcher Hosted Service - {Status}", "Startup Failed");
             throw;
         }
     }
 
     public override Task StopAsync(CancellationToken cancellationToken)
     {
-        _logger.Information("WatcherHostedService is stopping");
-        return base.StopAsync(cancellationToken);
+        _logger.Information("Watcher Hosted Service - {Status}", "Stopping");
+        var stopTask = base.StopAsync(cancellationToken);
+        _logger.Information("Watcher Hosted Service - {Status}", "Stopped");
+        return stopTask;
     }
 }

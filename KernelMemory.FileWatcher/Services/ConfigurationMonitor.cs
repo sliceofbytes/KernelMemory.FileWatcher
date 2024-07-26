@@ -25,25 +25,29 @@ internal class ConfigurationMonitor : IHostedService
         _kernelMemoryOptions = kernelMemoryOptions;
         _logger = logger.ForContext<ConfigurationMonitor>();
         _applicationLifetime = applicationLifetime;
-        _logger.Information("Configuration Monitor Constructed");
+        _logger.Information("Configuration Monitor - {Status}", "Constructed");
     }
 
     public Task StartAsync(CancellationToken cancellationToken)
     {
-        _logger.Information("Configuration Monitor Started");
+        _logger.Information("Configuration Monitor - {Status}", "Starting");
         _fileWatcherOptions.OnChange(_ => ValidateConfiguration());
         _kernelMemoryOptions.OnChange(_ => ValidateConfiguration());
+        _logger.Information("Configuration Monitor - {Status}", "Started");
         return Task.CompletedTask;
     }
 
     public Task StopAsync(CancellationToken cancellationToken)
     {
-        _logger.Information("Configuration Monitor Stopping");
-        return Task.CompletedTask;
+        _logger.Information("Configuration Monitor - {Status}", "Stopping");
+        var result = Task.CompletedTask;
+        _logger.Information("Configuration Monitor - {Status}", "Stopped");
+        return result;
     }
 
     private void ValidateConfiguration()
     {
+        _logger.Information("Configuration Monitor - {Status}", "Validating Configuration");
         try
         {
             var fileWatcherOptions = _configuration.GetSection(nameof(FileWatcherOptions)).Get<FileWatcherOptions>();
@@ -57,7 +61,7 @@ internal class ConfigurationMonitor : IHostedService
             Validator.ValidateObject(fileWatcherOptions, new ValidationContext(fileWatcherOptions), true);
             Validator.ValidateObject(kernelMemoryOptions, new ValidationContext(kernelMemoryOptions), true);
 
-            _logger.Information("Configuration validated successfully.");
+            _logger.Information("Configuration Monitor - {Status}", "Validating Successful");
         }
         catch (Exception ex)
         {
