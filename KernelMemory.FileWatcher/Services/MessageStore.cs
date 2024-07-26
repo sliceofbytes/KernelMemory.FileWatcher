@@ -7,6 +7,9 @@ using System.Text.RegularExpressions;
 
 namespace KernelMemory.FileWatcher.Services;
 
+/// <summary>
+/// Defines the contract for a message store that handles file events.
+/// </summary>
 internal interface IMessageStore
 {
     Task AddAsync(FileEvent fileEvent);
@@ -15,15 +18,34 @@ internal interface IMessageStore
     bool HasNext();
 }
 
-internal class MessageStore(ILogger logger, IOptions<FileWatcherOptions> options) : IMessageStore, IDisposable
+/// <summary>
+/// Thread-safe message store for file events. Uses ConcurrentDictionary for storage,
+/// SemaphoreSlim for write synchronization, and ObjectPool for StringBuilder efficiency.
+/// </summary>
+internal class MessageStore : IMessageStore, IDisposable
 {
     private readonly ConcurrentDictionary<string, Message> _store = new();
-    private readonly ILogger _logger = logger?.ForContext<MessageStore>() ?? throw new ArgumentNullException(nameof(logger));
-    private readonly FileWatcherOptions _options = options?.Value ?? throw new ArgumentNullException(nameof(options));
-    private readonly ObjectPool<StringBuilder> _pool = new DefaultObjectPoolProvider().CreateStringBuilderPool();
+    private readonly ILogger _logger;
+    private readonly FileWatcherOptions _options;
+
+    // Reusable StringBuilder pool to reduce memory allocations
+    private readonly ObjectPool<StringBuilder> _pool;
+
+     // Ensures single-threaded write access
     private readonly SemaphoreSlim _semaphore = new(1, 1);
+
     private bool _disposed;
 
+    public MessageStore(ILogger logger, IOptions<FileWatcherOptions> options)
+    {
+        _logger = logger?.ForContext<MessageStore>() ?? throw new ArgumentNullException(nameof(logger));
+        _options = options?.Value ?? throw new ArgumentNullException(nameof(options));
+        _pool = new DefaultObjectPoolProvider().CreateStringBuilderPool();
+    }
+
+    /// <summary>
+    /// Asynchronously adds a file event to the message store.
+    /// </summary>
     public async Task AddAsync(FileEvent fileEvent)
     {
         ArgumentNullException.ThrowIfNull(fileEvent);
@@ -63,12 +85,18 @@ internal class MessageStore(ILogger logger, IOptions<FileWatcherOptions> options
         }
     }
 
+    /// <summary>
+    /// Removes and returns the next message from the store, if available.
+    /// </summary>
     public Message? TakeNext()
     {
         string? key = _store.Keys.FirstOrDefault();
         return key != null && _store.TryRemove(key, out var message) ? message : null;
     }
 
+    /// <summary>
+    /// Removes and returns all messages from the store.
+    /// </summary>
     public IReadOnlyList<Message> TakeAll()
     {
         var messages = _store.Values.ToList();
@@ -76,37 +104,40 @@ internal class MessageStore(ILogger logger, IOptions<FileWatcherOptions> options
         return messages;
     }
 
+    /// <summary>
+    /// Checks if there are any messages in the store.
+    /// </summary>
     public bool HasNext() => !_store.IsEmpty;
 
+    /// <summary>
+    /// Builds a document ID from the index and file event.
+    /// </summary>
     private string BuildDocumentId(string index, FileEvent fileEvent)
     {
         const char separator = '_';
-        string documentPathing = Path.Combine(index, Path.ChangeExtension(fileEvent.RelativePath, null))
+        var sb = _pool.Get();
+        try
+        {
+            sb.Append(index)
+              .Append(separator)
+              .Append(Path.ChangeExtension(fileEvent.RelativePath, null)
                           .Replace(Path.DirectorySeparatorChar, separator)
-                          .Replace(' ', separator).ToLower();
+                          .Replace(' ', separator)
+                          .ToLowerInvariant());
 
-        string documentId = Regex.Replace(
-            documentPathing,
-            $@"[^a-zA-Z0-9{Regex.Escape(separator.ToString())}]+",
-            separator.ToString())
-            .Replace($"{separator}{separator}", separator.ToString())
-            .Trim(separator);
+            string documentPathing = sb.ToString();
 
-        return documentId;
-
-        //var sb = _pool.Get();
-        //try
-        //{
-        //    sb.Append(index)
-        //      .Append(separator)
-        //      .Append(fileEvent.RelativePath.Replace(Path.DirectorySeparatorChar, separator))
-        //      .Append(Path.GetFileNameWithoutExtension(fileEvent.FileName).Replace(Path.DirectorySeparatorChar, separator).Replace(' ', separator));
-        //    return sb.ToString();
-        //}
-        //finally
-        //{
-        //    _pool.Return(sb);
-        //}
+            return Regex.Replace(
+                documentPathing,
+                $@"[^a-z0-9{Regex.Escape(separator.ToString())}]+",
+                separator.ToString())
+                .Replace($"{separator}{separator}", separator.ToString())
+                .Trim(separator);
+        }
+        finally
+        {
+            _pool.Return(sb);
+        }
     }
 
     public void Dispose()

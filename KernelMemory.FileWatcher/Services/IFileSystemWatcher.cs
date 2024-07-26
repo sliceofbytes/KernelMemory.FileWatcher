@@ -7,5 +7,7 @@ internal interface IFileSystemWatcher : IDisposable
     event EventHandler<FileSystemEventArgs> Deleted;
     event EventHandler<RenamedEventArgs> Renamed;
     event EventHandler<ErrorEventArgs> Error;
+
+    string Path { get; }
     bool EnableRaisingEvents { get; set; }
 }

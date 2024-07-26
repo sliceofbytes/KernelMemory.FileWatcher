@@ -8,6 +8,7 @@ namespace KernelMemory.FileWatcher.Services;
 
 /// <summary>
 /// Processes messages from the message store and sends them to the Kernel Memory service.
+/// This class implements IHostedService for background processing and IAsyncDisposable for clean-up.
 /// </summary>
 internal class HttpWorker : IHostedService, IAsyncDisposable
 {
@@ -24,6 +25,10 @@ internal class HttpWorker : IHostedService, IAsyncDisposable
     /// <summary>
     /// Initializes a new instance of the HttpWorker class.
     /// </summary>
+    /// <param name="logger">The logger for this class.</param>
+    /// <param name="options">The options for Kernel Memory.</param>
+    /// <param name="httpClientFactory">The HTTP client factory for creating HttpClient instances.</param>
+    /// <param name="messageStore">The message store to process messages from.</param>
     public HttpWorker(
         ILogger logger,
         IOptions<KernelMemoryOptions> options,
@@ -42,6 +47,7 @@ internal class HttpWorker : IHostedService, IAsyncDisposable
     /// <summary>
     /// Starts the HttpWorker service.
     /// </summary>
+    /// <param name="cancellationToken">A token to monitor for cancellation requests.</param>
     public Task StartAsync(CancellationToken cancellationToken)
     {
         _logger.Information("Http Worker - {Status}", "Starting");
@@ -52,6 +58,7 @@ internal class HttpWorker : IHostedService, IAsyncDisposable
 
     /// <summary>
     /// Executes the message processing task.
+    /// This method is called by the Timer at regular intervals.
     /// </summary>
     private void ExecuteTask(object? state)
     {
@@ -62,6 +69,7 @@ internal class HttpWorker : IHostedService, IAsyncDisposable
     /// <summary>
     /// Stops the HttpWorker service.
     /// </summary>
+    /// <param name="cancellationToken">A token to monitor for cancellation requests.</param>
     public async Task StopAsync(CancellationToken cancellationToken)
     {
         _logger.Information("Http Worker - {Status}", "Stopping");
@@ -89,6 +97,7 @@ internal class HttpWorker : IHostedService, IAsyncDisposable
     /// <summary>
     /// Processes all messages in the store.
     /// </summary>
+    /// <param name="stoppingToken">A token to monitor for cancellation requests.</param>
     private async Task ProcessMessagesAsync(CancellationToken stoppingToken)
     {
         _logger.Information("Http Worker - Processing Messages {Status}", "Started");
@@ -118,6 +127,8 @@ internal class HttpWorker : IHostedService, IAsyncDisposable
     /// <summary>
     /// Processes a single message.
     /// </summary>
+    /// <param name="message">The message to process.</param>
+    /// <param name="stoppingToken">A token to monitor for cancellation requests.</param>
     private async Task ProcessMessageAsync(Message message, CancellationToken stoppingToken)
     {
         if (message.Event?.EventType == FileEventType.Ignore)

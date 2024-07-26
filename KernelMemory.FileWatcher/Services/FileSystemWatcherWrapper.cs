@@ -1,119 +1,140 @@
 ﻿namespace KernelMemory.FileWatcher.Services;
 
-internal class FileSystemWatcherWrapper(FileSystemWatcher watcher) : IFileSystemWatcher
+/// <summary>
+/// Wraps FileSystemWatcher to manage event handlers and improve testability.
+/// </summary>
+internal class FileSystemWatcherWrapper : IFileSystemWatcher
 {
     private readonly Dictionary<EventHandler<FileSystemEventArgs>, FileSystemEventHandler> _changedHandlers = [];
     private readonly Dictionary<EventHandler<FileSystemEventArgs>, FileSystemEventHandler> _createdHandlers = [];
     private readonly Dictionary<EventHandler<FileSystemEventArgs>, FileSystemEventHandler> _deletedHandlers = [];
     private readonly Dictionary<EventHandler<RenamedEventArgs>, RenamedEventHandler> _renamedHandlers = [];
     private readonly Dictionary<EventHandler<ErrorEventArgs>, ErrorEventHandler> _errorHandlers = [];
-    private readonly FileSystemWatcher _watcher = watcher;
+    private readonly FileSystemWatcher _watcher;
     private bool _disposed;
+
+    public FileSystemWatcherWrapper(FileSystemWatcher watcher)
+    {
+        _watcher = watcher ?? throw new ArgumentNullException(nameof(watcher));
+    }
 
     public event EventHandler<FileSystemEventArgs>? Changed
     {
-        add
-        {
-            if (value is null) return;
-            void handler(object sender, FileSystemEventArgs args) => value(sender, args);
-            _changedHandlers[value] = handler;
-            _watcher.Changed += handler;
-        }
-        remove
-        {
-            if (value is null) return;
-            if (_changedHandlers.TryGetValue(value, out var handler))
-            {
-                _watcher.Changed -= handler;
-                _changedHandlers.Remove(value);
-            }
-        }
+        add => AddFileSystemEventHandler(_changedHandlers, value, handler => _watcher.Changed += handler);
+        remove => RemoveFileSystemEventHandler(_changedHandlers, value, handler => _watcher.Changed -= handler);
     }
 
     public event EventHandler<FileSystemEventArgs>? Created
     {
-        add
-        {
-            if (value is null) return;
-            void handler(object sender, FileSystemEventArgs args) => value(sender, args);
-            _createdHandlers[value] = handler;
-            _watcher.Created += handler;
-        }
-        remove
-        {
-            if (value is null) return;
-            if (_createdHandlers.TryGetValue(value, out var handler))
-            {
-                _watcher.Created -= handler;
-                _createdHandlers.Remove(value);
-            }
-        }
+        add => AddFileSystemEventHandler(_createdHandlers, value, handler => _watcher.Created += handler);
+        remove => RemoveFileSystemEventHandler(_createdHandlers, value, handler => _watcher.Created -= handler);
     }
 
     public event EventHandler<FileSystemEventArgs>? Deleted
     {
-        add
-        {
-            if (value is null) return;
-            void handler(object sender, FileSystemEventArgs args) => value(sender, args);
-            _deletedHandlers[value] = handler;
-            _watcher.Deleted += handler;
-        }
-        remove
-        {
-            if (value is null) return;
-            if (_deletedHandlers.TryGetValue(value, out var handler))
-            {
-                _watcher.Deleted -= handler;
-                _deletedHandlers.Remove(value);
-            }
-        }
+        add => AddFileSystemEventHandler(_deletedHandlers, value, handler => _watcher.Deleted += handler);
+        remove => RemoveFileSystemEventHandler(_deletedHandlers, value, handler => _watcher.Deleted -= handler);
     }
 
     public event EventHandler<RenamedEventArgs>? Renamed
     {
-        add
-        {
-            if (value is null) return;
-            void handler(object sender, RenamedEventArgs args) => value(sender, args);
-            _renamedHandlers[value] = handler;
-            _watcher.Renamed += handler;
-        }
-        remove
-        {
-            if (value is null) return;
-            if (_renamedHandlers.TryGetValue(value, out var handler))
-            {
-                _watcher.Renamed -= handler;
-                _renamedHandlers.Remove(value);
-            }
-        }
+        add => AddRenamedEventHandler(_renamedHandlers, value, handler => _watcher.Renamed += handler);
+        remove => RemoveRenamedEventHandler(_renamedHandlers, value, handler => _watcher.Renamed -= handler);
     }
 
     public event EventHandler<ErrorEventArgs>? Error
     {
-        add
-        {
-            if (value is null) return;
-            void handler(object sender, ErrorEventArgs args) => value(sender, args);
-            _errorHandlers[value] = handler;
-            _watcher.Error += handler;
-        }
-        remove
-        {
-            if (value is null) return;
-            if (_errorHandlers.TryGetValue(value, out var handler))
-            {
-                _watcher.Error -= handler;
-                _errorHandlers.Remove(value);
-            }
-        }
+        add => AddErrorEventHandler(_errorHandlers, value, handler => _watcher.Error += handler);
+        remove => RemoveErrorEventHandler(_errorHandlers, value, handler => _watcher.Error -= handler);
     }
 
+    /// <summary>
+    /// Gets the path of the directory to watch.
+    /// </summary>
+    public string Path
+    {
+        get => _watcher.Path;
+    }
+
+    /// <summary>
+    /// Gets or sets a value indicating whether the component is enabled.
+    /// </summary>
     public bool EnableRaisingEvents
     {
         get => _watcher.EnableRaisingEvents;
         set => _watcher.EnableRaisingEvents = value;
+    }
+
+    private void AddFileSystemEventHandler(
+        Dictionary<EventHandler<FileSystemEventArgs>, FileSystemEventHandler> handlers,
+        EventHandler<FileSystemEventArgs>? value,
+        Action<FileSystemEventHandler> addToWatcher)
+    {
+        if (value is null) return;
+        var handler = new FileSystemEventHandler((sender, args) => value(sender, args));
+        handlers[value] = handler;
+        addToWatcher(handler);
+    }
+
+    private void RemoveFileSystemEventHandler(
+        Dictionary<EventHandler<FileSystemEventArgs>, FileSystemEventHandler> handlers,
+        EventHandler<FileSystemEventArgs>? value,
+        Action<FileSystemEventHandler> removeFromWatcher)
+    {
+        if (value is null) return;
+        if (handlers.TryGetValue(value, out var handler))
+        {
+            removeFromWatcher(handler);
+            handlers.Remove(value);
+        }
+    }
+
+    private void AddRenamedEventHandler(
+        Dictionary<EventHandler<RenamedEventArgs>, RenamedEventHandler> handlers,
+        EventHandler<RenamedEventArgs>? value,
+        Action<RenamedEventHandler> addToWatcher)
+    {
+        if (value is null) return;
+        var handler = new RenamedEventHandler((sender, args) => value(sender, args));
+        handlers[value] = handler;
+        addToWatcher(handler);
+    }
+
+    private void RemoveRenamedEventHandler(
+        Dictionary<EventHandler<RenamedEventArgs>, RenamedEventHandler> handlers,
+        EventHandler<RenamedEventArgs>? value,
+        Action<RenamedEventHandler> removeFromWatcher)
+    {
+        if (value is null) return;
+        if (handlers.TryGetValue(value, out var handler))
+        {
+            removeFromWatcher(handler);
+            handlers.Remove(value);
+        }
+    }
+
+    private void AddErrorEventHandler(
+        Dictionary<EventHandler<ErrorEventArgs>, ErrorEventHandler> handlers,
+        EventHandler<ErrorEventArgs>? value,
+        Action<ErrorEventHandler> addToWatcher)
+    {
+        if (value is null) return;
+        var handler = new ErrorEventHandler((sender, args) => value(sender, args));
+        handlers[value] = handler;
+        addToWatcher(handler);
+    }
+
+    private void RemoveErrorEventHandler(
+        Dictionary<EventHandler<ErrorEventArgs>, ErrorEventHandler> handlers,
+        EventHandler<ErrorEventArgs>? value,
+        Action<ErrorEventHandler> removeFromWatcher)
+    {
+        if (value is null) return;
+        if (handlers.TryGetValue(value, out var handler))
+        {
+            removeFromWatcher(handler);
+            handlers.Remove(value);
+        }
     }
 
     public void Dispose()

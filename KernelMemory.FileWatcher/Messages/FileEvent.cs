@@ -1,6 +1,4 @@
-﻿using System.Text.RegularExpressions;
-
-namespace KernelMemory.FileWatcher.Messages;
+﻿namespace KernelMemory.FileWatcher.Messages;
 
 internal record FileEvent
 {
@@ -24,14 +22,5 @@ internal record FileEvent
             throw new ArgumentException("Directory cannot be empty or whitespace.", nameof(directory));
         if (string.IsNullOrWhiteSpace(relativePath))
             throw new ArgumentException("RelativePath cannot be empty or whitespace.", nameof(relativePath));
-    }
-
-    public string ToDocumentId(char separator = '_')
-    {
-        string documentPathing = Path.Combine(RelativePath, Path.GetFileNameWithoutExtension(FileName))
-                                  .Replace(Path.DirectorySeparatorChar, separator)
-                                  .Replace(' ', separator);
-
-        return Regex.Replace(documentPathing, $@"[^a-zA-Z0-9{Regex.Escape(separator.ToString())}]+", separator.ToString()).Trim(separator);
     }
 }

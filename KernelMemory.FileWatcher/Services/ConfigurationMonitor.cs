@@ -5,6 +5,9 @@ using System.ComponentModel.DataAnnotations;
 
 namespace KernelMemory.FileWatcher.Services;
 
+/// <summary>
+/// Monitors and validates configuration changes for FileWatcher and KernelMemory options.
+/// </summary>
 internal class ConfigurationMonitor : IHostedService
 {
     private readonly IConfiguration _configuration;
@@ -20,11 +23,11 @@ internal class ConfigurationMonitor : IHostedService
         ILogger logger,
         IHostApplicationLifetime applicationLifetime)
     {
-        _configuration = configuration;
-        _fileWatcherOptions = fileWatcherOptions;
-        _kernelMemoryOptions = kernelMemoryOptions;
-        _logger = logger.ForContext<ConfigurationMonitor>();
-        _applicationLifetime = applicationLifetime;
+        _configuration = configuration ?? throw new ArgumentNullException(nameof(configuration));
+        _fileWatcherOptions = fileWatcherOptions ?? throw new ArgumentNullException(nameof(fileWatcherOptions));
+        _kernelMemoryOptions = kernelMemoryOptions ?? throw new ArgumentNullException(nameof(kernelMemoryOptions));
+        _logger = logger?.ForContext<ConfigurationMonitor>() ?? throw new ArgumentNullException(nameof(logger));
+        _applicationLifetime = applicationLifetime ?? throw new ArgumentNullException(nameof(applicationLifetime));
         _logger.Information("Configuration Monitor - {Status}", "Constructed");
     }
 
@@ -40,11 +43,15 @@ internal class ConfigurationMonitor : IHostedService
     public Task StopAsync(CancellationToken cancellationToken)
     {
         _logger.Information("Configuration Monitor - {Status}", "Stopping");
-        var result = Task.CompletedTask;
+
+        // No specific stop actions needed
         _logger.Information("Configuration Monitor - {Status}", "Stopped");
-        return result;
+        return Task.CompletedTask;
     }
 
+    /// <summary>
+    /// Validates the current configuration when changes occur.
+    /// </summary>
     private void ValidateConfiguration()
     {
         _logger.Information("Configuration Monitor - {Status}", "Validating Configuration");
@@ -58,14 +65,14 @@ internal class ConfigurationMonitor : IHostedService
                 throw new InvalidOperationException("Configuration sections are missing.");
             }
 
-            Validator.ValidateObject(fileWatcherOptions, new ValidationContext(fileWatcherOptions), true);
-            Validator.ValidateObject(kernelMemoryOptions, new ValidationContext(kernelMemoryOptions), true);
+            Validator.ValidateObject(fileWatcherOptions, new ValidationContext(fileWatcherOptions), validateAllProperties: true);
+            Validator.ValidateObject(kernelMemoryOptions, new ValidationContext(kernelMemoryOptions), validateAllProperties: true);
 
-            _logger.Information("Configuration Monitor - {Status}", "Validating Successful");
+            _logger.Information("Configuration Monitor - {Status}", "Validation Successful");
         }
         catch (Exception ex)
         {
-            _logger.Error(ex, "Configuration validation failed. Stopping the application.");
+            _logger.Error(ex, "Configuration Monitor - {Status}", "Validation Failed");
             _applicationLifetime.StopApplication();
         }
     }

@@ -4,11 +4,17 @@ using System.Collections.Concurrent;
 
 namespace KernelMemory.FileWatcher.Services;
 
+/// <summary>
+/// Defines the contract for the file watcher service.
+/// </summary>
 internal interface IFileWatcherService
 {
     Task WatchAsync(CancellationToken cancellationToken);
 }
 
+/// <summary>
+/// Implements the file watching service, managing multiple directory watchers and processing file events.
+/// </summary>
 internal class FileWatcherService : IFileWatcherService, IDisposable
 {
     private readonly ILogger _logger;
@@ -20,27 +26,35 @@ internal class FileWatcherService : IFileWatcherService, IDisposable
     private readonly CancellationTokenSource _cts = new();
     private readonly List<Task> _initialScanTasks = [];
     private Task? _processingTask;
+    private Task? _watchTask;
     private bool _disposed;
 
+    /// <summary>
+    /// Initializes a new instance of the FileWatcherService.
+    /// </summary>
     public FileWatcherService(
         IFileWatcherFactory fileWatcherFactory,
         IMessageStore messageStore,
         IOptions<FileWatcherOptions> options)
     {
         _logger = Log.ForContext<FileWatcherService>();
-        _fileWatcherFactory = fileWatcherFactory;
-        _options = options.Value;
-        _messageStore = messageStore;
+        _fileWatcherFactory = fileWatcherFactory ?? throw new ArgumentNullException(nameof(fileWatcherFactory));
+        _options = options?.Value ?? throw new ArgumentNullException(nameof(options));
+        _messageStore = messageStore ?? throw new ArgumentNullException(nameof(messageStore));
     }
 
-    private Task? _watchTask;
-
+    /// <summary>
+    /// Starts the file watching process asynchronously.
+    /// </summary>
     public Task WatchAsync(CancellationToken cancellationToken)
     {
         _watchTask = Task.Run(() => WatchInternalAsync(cancellationToken), cancellationToken);
         return Task.CompletedTask;
     }
 
+    /// <summary>
+    /// Internal method to handle the file watching process.
+    /// </summary>
     private async Task WatchInternalAsync(CancellationToken cancellationToken)
     {
         _logger.Information("File Watcher Service - {Status}", "Starting");
@@ -70,7 +84,9 @@ internal class FileWatcherService : IFileWatcherService, IDisposable
         }
     }
 
-
+    /// <summary>
+    /// Sets up a watcher for a specific directory.
+    /// </summary>
     private void WatchDirectory(FileWatcherDirectoryOptions directory)
     {
         var watcher = _fileWatcherFactory.Create(directory.Path, directory.Filter, directory.IncludeSubdirectories);
@@ -101,10 +117,12 @@ internal class FileWatcherService : IFileWatcherService, IDisposable
             _initialScanTasks.Add(initialScanTask);
         }
 
-        _logger.Information("File Watcher Service - {Status}", "Watching");
-        _logger.Information("File Watcher Service - {Path}", directory.Path);
+        _logger.Information("File Watcher Service - {Status} {Path}", "Watching", directory.Path);
     }
 
+    /// <summary>
+    /// Processes files asynchronously from the queue.
+    /// </summary>
     private async Task ProcessFilesAsync(CancellationToken cancellationToken)
     {
         _logger.Information("File Watcher Service - {Status}", "Process Loop Started");
@@ -134,6 +152,9 @@ internal class FileWatcherService : IFileWatcherService, IDisposable
         }
     }
 
+    /// <summary>
+    /// Wraps event handlers to provide consistent error handling.
+    /// </summary>
     private async Task WrapEventHandlerAsync(string eventType, FileSystemEventArgs e, Func<Task> action)
     {
         try
@@ -154,6 +175,9 @@ internal class FileWatcherService : IFileWatcherService, IDisposable
         }
     }
 
+    /// <summary>
+    /// Performs an initial scan of a directory.
+    /// </summary>
     private async Task InitialScanAsync(FileWatcherDirectoryOptions directory)
     {
         _logger.Information("File Watcher Service - {Status}", "Initial Scan Starting");
@@ -170,6 +194,9 @@ internal class FileWatcherService : IFileWatcherService, IDisposable
         });
     }
 
+    /// <summary>
+    /// Enqueues a file event for processing.
+    /// </summary>
     private async Task EnqueueEventAsync(FileSystemEventArgs e, FileWatcherDirectoryOptions directory)
     {
         var eventType = ConvertEventTypes(e.ChangeType);
@@ -184,6 +211,9 @@ internal class FileWatcherService : IFileWatcherService, IDisposable
         }
     }
 
+    /// <summary>
+    /// Enqueues a file event with retry logic.
+    /// </summary>
     private async Task EnqueueFileEventAsync(FileEventType eventType, string fullPath, FileWatcherDirectoryOptions directory)
     {
         int retryCount = 0;
@@ -222,11 +252,17 @@ internal class FileWatcherService : IFileWatcherService, IDisposable
         _logger.Error("Failed to enqueue file event for {FullPath} after {MaxRetries} retries", fullPath, maxRetries);
     }
 
+    /// <summary>
+    /// Handles errors from the file system watcher.
+    /// </summary>
     private void OnError(ErrorEventArgs e)
     {
         _logger.Error(e.GetException(), "An error occurred in the file watcher");
     }
 
+    /// <summary>
+    /// Converts FileSystemWatcher change types to FileEventType.
+    /// </summary>
     private static FileEventType ConvertEventTypes(WatcherChangeTypes wct) =>
         wct switch
         {
