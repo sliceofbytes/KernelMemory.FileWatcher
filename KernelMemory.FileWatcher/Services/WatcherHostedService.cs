@@ -1,7 +1,7 @@
 ﻿using Microsoft.Extensions.Hosting;
 
 namespace KernelMemory.FileWatcher.Services;
-internal class WatcherHostedService : IHostedService
+internal class WatcherHostedService : BackgroundService
 {
     private readonly IFileWatcherService _fileWatcher;
     private readonly ILogger _logger;
@@ -12,13 +12,12 @@ internal class WatcherHostedService : IHostedService
         _logger = logger.ForContext<WatcherHostedService>();
     }
 
-    public async Task StartAsync(CancellationToken cancellationToken)
+    protected override Task ExecuteAsync(CancellationToken stoppingToken)
     {
         _logger.Information("WatcherHostedService starting");
         try
         {
-            await _fileWatcher.WatchAsync(cancellationToken);
-            _logger.Information("WatcherHostedService started successfully");
+            return _fileWatcher.WatchAsync(stoppingToken);
         }
         catch (Exception ex)
         {
@@ -27,10 +26,9 @@ internal class WatcherHostedService : IHostedService
         }
     }
 
-    public Task StopAsync(CancellationToken cancellationToken)
+    public override Task StopAsync(CancellationToken cancellationToken)
     {
         _logger.Information("WatcherHostedService is stopping");
-        return Task.CompletedTask;
+        return base.StopAsync(cancellationToken);
     }
-
 }

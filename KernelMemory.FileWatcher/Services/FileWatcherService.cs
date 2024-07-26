@@ -33,7 +33,15 @@ internal class FileWatcherService : IFileWatcherService, IDisposable
         _messageStore = messageStore;
     }
 
-    public async Task WatchAsync(CancellationToken cancellationToken)
+    private Task? _watchTask;
+
+    public Task WatchAsync(CancellationToken cancellationToken)
+    {
+        _watchTask = Task.Run(() => WatchInternalAsync(cancellationToken), cancellationToken);
+        return Task.CompletedTask;
+    }
+
+    private async Task WatchInternalAsync(CancellationToken cancellationToken)
     {
         _logger.Information("Starting file watching process");
         foreach (var directory in _options.Directories)
@@ -41,8 +49,7 @@ internal class FileWatcherService : IFileWatcherService, IDisposable
             WatchDirectory(directory);
         }
 
-        _processingTask = ProcessFilesAsync();
-        _logger.Information("File processing task started");
+        _processingTask = ProcessFilesAsync(cancellationToken);
 
         if (_options.WaitForInitialScans)
         {
@@ -50,6 +57,8 @@ internal class FileWatcherService : IFileWatcherService, IDisposable
             await Task.WhenAll(_initialScanTasks);
             _logger.Information("Initial scans completed");
         }
+
+        _logger.Information("File watching setup completed, now running indefinitely");
 
         try
         {
@@ -59,13 +68,64 @@ internal class FileWatcherService : IFileWatcherService, IDisposable
         {
             _logger.Information(oce, "File watching cancelled");
         }
-        finally
-        {
-            // Cleanup code
-        }
-
-        _logger.Information("File watching setup completed, now running indefinitely");
     }
+
+    //public async Task WatchAsync(CancellationToken cancellationToken)
+    //{
+    //    _logger.Information("Starting file watching process");
+    //    foreach (var directory in _options.Directories)
+    //    {
+    //        WatchDirectory(directory);
+    //    }
+
+    //    _processingTask = ProcessFilesAsync(cancellationToken);
+
+    //    if (_options.WaitForInitialScans)
+    //    {
+    //        _logger.Information("Waiting for initial scans to complete");
+    //        await Task.WhenAll(_initialScanTasks);
+    //        _logger.Information("Initial scans completed");
+    //    }
+
+    //    _logger.Information("File watching setup completed, now running indefinitely");
+
+    //    // Wait for cancellation
+    //    await Task.Delay(Timeout.Infinite, cancellationToken);
+    //}
+
+    //public async Task WatchAsync(CancellationToken cancellationToken)
+    //{
+    //    _logger.Information("Starting file watching process");
+    //    foreach (var directory in _options.Directories)
+    //    {
+    //        WatchDirectory(directory);
+    //    }
+
+    //    _processingTask = ProcessFilesAsync();
+    //    _logger.Information("File processing task started");
+
+    //    if (_options.WaitForInitialScans)
+    //    {
+    //        _logger.Information("Waiting for initial scans to complete");
+    //        await Task.WhenAll(_initialScanTasks);
+    //        _logger.Information("Initial scans completed");
+    //    }
+
+    //    try
+    //    {
+    //        await Task.Delay(Timeout.Infinite, cancellationToken);
+    //    }
+    //    catch (OperationCanceledException oce)
+    //    {
+    //        _logger.Information(oce, "File watching cancelled");
+    //    }
+    //    finally
+    //    {
+    //        // Cleanup code
+    //    }
+
+    //    _logger.Information("File watching setup completed, now running indefinitely");
+    //}
 
     private void WatchDirectory(FileWatcherDirectoryOptions directory)
     {
@@ -100,12 +160,12 @@ internal class FileWatcherService : IFileWatcherService, IDisposable
         _logger.Information("Watching {DirectoryPath}", directory.Path);
     }
 
-    private async Task ProcessFilesAsync()
+    private async Task ProcessFilesAsync(CancellationToken cancellationToken)
     {
         _logger.Information("File processing loop started");
         try
         {
-            while (!_cts.Token.IsCancellationRequested)
+            while (!cancellationToken.IsCancellationRequested)
             {
                 if (_filesToProcess.TryTake(out string? file, Timeout.Infinite, _cts.Token))
                 {
@@ -244,7 +304,7 @@ internal class FileWatcherService : IFileWatcherService, IDisposable
             {
                 // Send cancel signal to start the dispose process.
                 _cts?.Cancel();
-
+                _watchTask?.Wait();
                 // Wait for the initial scan to complete or respond to cancel.
                 Task.WhenAll(_initialScanTasks).Wait();
 

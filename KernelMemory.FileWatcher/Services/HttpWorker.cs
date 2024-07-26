@@ -55,7 +55,7 @@ internal class HttpWorker : IHostedService, IAsyncDisposable
     private void ExecuteTask(object? state)
     {
         _logger.Debug("HttpWorker timer tick");
-        _executingTask = ProcessMessagesAsync(_stoppingCts.Token);
+        _ = ProcessMessagesAsync(_stoppingCts.Token);
     }
 
     /// <summary>

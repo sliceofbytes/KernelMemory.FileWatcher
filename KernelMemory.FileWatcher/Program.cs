@@ -30,22 +30,10 @@ internal class Program
             {
                 using var host = CreateHostBuilder(args).Build();
                 Log.Information("Host built...");
-                var lifetime = host.Services.GetRequiredService<IHostApplicationLifetime>();
-
-                using var cts = new CancellationTokenSource();
-                lifetime.ApplicationStopping.Register(() => cts.Cancel());
 
                 Log.Information("Starting Application");
-                try
-                {
-                    await host.StartAsync(cts.Token);
-                    Log.Information("Host.StartAsync completed successfully");
-                }
-                catch (Exception ex)
-                {
-                    Log.Error(ex, "Exception occurred during host.StartAsync");
-                    throw; // Re-throw to be caught by the outer try-catch
-                }
+                await host.StartAsync();
+                Log.Information("Host.StartAsync completed successfully");
 
                 // Log all hosted services
                 var hostedServices = host.Services.GetServices<IHostedService>();
@@ -55,9 +43,9 @@ internal class Program
                 }
 
                 // Wait for the application to stop
-                await host.WaitForShutdownAsync(cts.Token);
+                await host.WaitForShutdownAsync();
 
-                if (cts.IsCancellationRequested)
+                if (host.Services.GetRequiredService<IHostApplicationLifetime>().ApplicationStopping.IsCancellationRequested)
                 {
                     Log.Information("Application stop requested. Restarting...");
                     continue; // Restart the application
