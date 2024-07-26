@@ -17,6 +17,7 @@ internal class Program
 
     internal static async Task Main(string[] args)
     {
+        // Configure and create the initial logger
         Log.Logger = new LoggerConfiguration()
             .MinimumLevel.Override("Microsoft", LogEventLevel.Information)
             .Enrich.FromLogContext()
@@ -28,6 +29,7 @@ internal class Program
         {
             try
             {
+                // Build and start the host
                 Log.Information("Building Host - {Status}", "Started");
                 using var host = CreateHostBuilder(args).Build();
                 Log.Information("Building Host - {Status}", "Complete");
@@ -36,41 +38,40 @@ internal class Program
                 await host.StartAsync();
                 Log.Information("Application Startup - {Status}", "Complete");
 
-                // Log all hosted services
-                // var hostedServices = host.Services.GetServices<IHostedService>();
-                // foreach (var service in hostedServices)
-                // {
-                //    Log.Information("Hosted service registered: {ServiceType}", service.GetType().Name);
-                // }
-
                 // Wait for the application to stop
                 await host.WaitForShutdownAsync();
 
+                // Check if the application was stopped normally
                 if (host.Services.GetRequiredService<IHostApplicationLifetime>().ApplicationStopping.IsCancellationRequested)
                 {
                     Log.Information("Application stop requested. Restarting...");
-                    continue; // Restart the application
+
+                    // Restart the application
+                    continue;
                 }
 
-                break; // Normal exit
-
+                // Normal exit
+                break;
             }
             catch (OptionsValidationException ove)
             {
-                Console.WriteLine($"Configuration is invalid: {ove.Message}");
+                // Handle configuration validation errors
                 Log.Error(ove, "Configuration is invalid. Retrying in 30 seconds...");
                 await Task.Delay(TimeSpan.FromSeconds(30));
             }
             catch (Exception ex)
             {
+                // Handle unexpected errors
                 Log.Fatal(ex, "Host terminated unexpectedly");
-                break; // Exit the loop on unexpected errors
+                break;
             }
         }
 
+        // Ensure all logs are written before exiting
         await Log.CloseAndFlushAsync();
     }
 
+    // Create and configure the host
     private static IHostBuilder CreateHostBuilder(string[] args) =>
         Host.CreateDefaultBuilder(args)
             .ConfigureAppConfiguration((_, config) =>
@@ -84,9 +85,15 @@ internal class Program
             })
             .UseConsoleLifetime();
 
+    // Build the configuration
     private static IConfiguration BuildConfiguration()
     {
-        string basePath = File.Exists(Path.Combine(DefaultOptions.ConfigFolder, DefaultOptions.ConfigFileName)) ? DefaultOptions.ConfigFolder : AppContext.BaseDirectory;
+        // Determine the base path for configuration files
+        string basePath = File.Exists(Path.Combine(DefaultOptions.ConfigFolder, DefaultOptions.ConfigFileName))
+            ? DefaultOptions.ConfigFolder
+            : AppContext.BaseDirectory;
+
+        // Build and return the configuration
         return new ConfigurationBuilder()
             .SetBasePath(basePath)
             .AddJsonFile(DefaultOptions.ConfigFileName, optional: false, reloadOnChange: true)
@@ -95,33 +102,40 @@ internal class Program
             .Build();
     }
 
+    // Configure services for dependency injection
     private static void ConfigureServices(IServiceCollection services, IConfiguration configuration)
     {
-        services
-            .ConfigureLogging(configuration);
+        // Configure logging
+        services.ConfigureLogging(configuration);
 
+        // Configure and validate FileWatcherOptions
         services
             .AddOptions<FileWatcherOptions>()
             .Bind(configuration.GetSection(nameof(FileWatcherOptions)))
             .ValidateDataAnnotations()
             .ValidateOnStart();
 
+        // Configure and validate KernelMemoryOptions
         services
             .AddOptions<KernelMemoryOptions>()
             .Bind(configuration.GetSection(nameof(KernelMemoryOptions)))
             .ValidateDataAnnotations()
             .ValidateOnStart();
 
+        // Add options validators
         services.AddSingleton<IValidateOptions<FileWatcherOptions>, FileWatcherOptionsValidator>();
         services.AddSingleton<IValidateOptions<KernelMemoryOptions>, KernelMemoryOptionsValidator>();
 
         // Configure Kernel Memory Http Client
         services.ConfigureHttpClient(configuration);
 
-        // Register policies for dependency injection for configuration changes.
-        services.AddSingleton<IRetryPolicy<HttpResponseMessage>>(sp => HttpClientStartup.GetRetryPolicy(sp.GetRequiredService<IOptions<KernelMemoryOptions>>().Value));
-        services.AddSingleton<ICircuitBreakerPolicy<HttpResponseMessage>>(sp => HttpClientStartup.GetCircuitBreakerPolicy(sp.GetRequiredService<IOptions<KernelMemoryOptions>>().Value));
+        // Register policies for dependency injection
+        services.AddSingleton<IRetryPolicy<HttpResponseMessage>>(sp =>
+            HttpClientStartup.GetRetryPolicy(sp.GetRequiredService<IOptions<KernelMemoryOptions>>().Value));
+        services.AddSingleton<ICircuitBreakerPolicy<HttpResponseMessage>>(sp =>
+            HttpClientStartup.GetCircuitBreakerPolicy(sp.GetRequiredService<IOptions<KernelMemoryOptions>>().Value));
 
+        // Register services and hosted services
         services
             .AddSingleton<IMessageStore, MessageStore>()
             .AddSingleton<IFileWatcherFactory, FileWatcherFactory>()
@@ -130,6 +144,8 @@ internal class Program
             .AddHostedService<WatcherHostedService>()
             .AddHostedService<HttpWorker>();
 
-        services.Configure<HostOptions>(opts => opts.ShutdownTimeout = TimeSpan.FromSeconds(DefaultOptions.HostShutdownTimeout));
+        // Configure host options
+        services.Configure<HostOptions>(opts =>
+            opts.ShutdownTimeout = TimeSpan.FromSeconds(DefaultOptions.HostShutdownTimeout));
     }
 }
